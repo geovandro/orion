@@ -17,6 +17,11 @@ class NewEvaluator:
             return self.backend.Rotate(ctxt, amount)
         return self.backend.RotateNew(ctxt, amount)
 
+    def conjugate(self, ctxt, in_place):
+        if in_place:
+            return self.backend.Conjugate(ctxt)
+        return self.backend.ConjugateNew(ctxt)
+
     def add_scalar(self, ctxt, scalar, in_place):
         if in_place:
             return self.backend.AddScalar(ctxt, float(scalar))

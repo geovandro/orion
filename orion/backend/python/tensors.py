@@ -227,6 +227,25 @@ class CipherTensor:
             rot_ids.append(rot_id)
 
         return CipherTensor(self.scheme, rot_ids, self.shape, self.on_shape, self.start, self.stride, self.stop, self.is_complex)
+
+    def conjugate(self, in_place=False):
+        """Complex-conjugate each slot of this ciphertext.
+
+        For a purely real ciphertext this is a no-op (up to CKKS noise).
+        For a ciphertext packing two independent real lanes as
+        re + im*1j, conjugate() negates the imaginary lane, which is
+        useful for de-interleaving packed lanes (e.g. combined with a
+        multiplication to extract re(a)*re(b) + im(a)*im(b) without
+        cross terms).
+        """
+        conj_ids = []
+        for ctxt in self.ids:
+            conj_id = self.evaluator.conjugate(ctxt, in_place)
+            conj_ids.append(conj_id)
+
+        if in_place:
+            return self
+        return CipherTensor(self.scheme, conj_ids, self.shape, self.on_shape, self.start, self.stride, self.stop, self.is_complex)
     
     def _check_valid(self, other):
         return

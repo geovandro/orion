@@ -424,6 +424,18 @@ class LattigoLibrary:
             restype=ctypes.c_int
         )       
 
+        self.Conjugate = LattigoFunction(
+            self.lib.Conjugate,
+            argtypes=[ctypes.c_int],
+            restype=ctypes.c_int
+        )
+
+        self.ConjugateNew = LattigoFunction(
+            self.lib.ConjugateNew,
+            argtypes=[ctypes.c_int],
+            restype=ctypes.c_int
+        )
+
         self.Rescale = LattigoFunction(
             self.lib.Rescale,
             argtypes=[ctypes.c_int],

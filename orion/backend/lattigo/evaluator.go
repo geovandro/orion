@@ -20,6 +20,10 @@ func NewEvaluator() {
 	// all keys needed for the rotations and summations in the hyrid
 	// method remain alive.
 	AddPo2RotationKeys()
+
+	// Also generate the Galois key needed for complex conjugation, used
+	// to de-interleave real/imaginary lane-packed ciphertexts.
+	AddConjugationKey()
 }
 
 func AddPo2RotationKeys() {
@@ -38,6 +42,22 @@ func AddRotationKey(rotation C.int) {
 	if _, exists := liveRotKeys[galEl]; !exists {
 		rotKey := scheme.KeyGen.GenGaloisKeyNew(galEl, scheme.SecretKey)
 		liveRotKeys[galEl] = rotKey
+
+		allKeysList := GetValuesFromMap(liveRotKeys)
+		keys := rlwe.NewMemEvaluationKeySet(scheme.RelinKey, allKeysList...)
+		scheme.Evaluator = scheme.Evaluator.WithKey(keys)
+	}
+}
+
+// AddConjugationKey generates (once) the Galois key needed for complex
+// conjugation. Conjugation uses a distinct Galois element from any
+// power-of-two rotation, so it's tracked/generated separately.
+func AddConjugationKey() {
+	galEl := scheme.Params.GaloisElementOrderTwoOrthogonalSubgroup()
+
+	if _, exists := liveRotKeys[galEl]; !exists {
+		conjKey := scheme.KeyGen.GenGaloisKeyNew(galEl, scheme.SecretKey)
+		liveRotKeys[galEl] = conjKey
 
 		allKeysList := GetValuesFromMap(liveRotKeys)
 		keys := rlwe.NewMemEvaluationKeySet(scheme.RelinKey, allKeysList...)
@@ -72,6 +92,33 @@ func RotateNew(ciphertextID, amount C.int) C.int {
 	AddRotationKey(amount)
 
 	ctOut, err := scheme.Evaluator.RotateNew(ctIn, int(amount))
+	if err != nil {
+		panic(err)
+	}
+
+	idx := PushCiphertext(ctOut)
+	return C.int(idx)
+}
+
+//export Conjugate
+func Conjugate(ciphertextID C.int) C.int {
+	ctIn := RetrieveCiphertext(int(ciphertextID))
+	AddConjugationKey()
+
+	err := scheme.Evaluator.Conjugate(ctIn, ctIn)
+	if err != nil {
+		panic(err)
+	}
+
+	return ciphertextID
+}
+
+//export ConjugateNew
+func ConjugateNew(ciphertextID C.int) C.int {
+	ctIn := RetrieveCiphertext(int(ciphertextID))
+	AddConjugationKey()
+
+	ctOut, err := scheme.Evaluator.ConjugateNew(ctIn)
 	if err != nil {
 		panic(err)
 	}
