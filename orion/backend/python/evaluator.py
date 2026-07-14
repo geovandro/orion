@@ -33,6 +33,11 @@ class NewEvaluator:
         self.backend.RotateHoistedNew(ctxt, rotations, count, output_ids)
         return [int(output_ids[i]) for i in range(count)]
 
+    def conjugate(self, ctxt, in_place):
+        if in_place:
+            return self.backend.Conjugate(ctxt)
+        return self.backend.ConjugateNew(ctxt)
+
     def add_scalar(self, ctxt, scalar, in_place):
         if in_place:
             return self.backend.AddScalar(ctxt, float(scalar))
