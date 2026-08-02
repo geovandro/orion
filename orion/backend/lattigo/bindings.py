@@ -628,6 +628,32 @@ class LattigoLibrary:
             restype=ctypes.c_int
         )
 
+        self.RotateHoistedNew = LattigoFunction(
+                    self.lib.RotateHoistedNew,
+                    argtypes=[
+                        ctypes.c_int,
+                        ctypes.POINTER(ctypes.c_int),
+                        ctypes.c_int,
+                        ctypes.POINTER(ctypes.c_int),
+                    ],
+                    restype=None,
+                )
+        
+        self.MulCiphertextNoRelinNew = LattigoFunction(
+            self.lib.MulCiphertextNoRelinNew,
+            argtypes=[
+                ctypes.c_int,
+                ctypes.c_int,
+            ],
+            restype=ctypes.c_int,
+        )
+
+        self.RelinearizeCiphertextNew = LattigoFunction(
+            self.lib.RelinearizeCiphertextNew,
+            argtypes=[ctypes.c_int],
+            restype=ctypes.c_int,
+        )
+
     def setup_poly_evaluator(self):
         self.NewPolynomialEvaluator = LattigoFunction(
             self.lib.NewPolynomialEvaluator,
