@@ -81,7 +81,20 @@ class NetworkDAG(nx.DiGraph):
         slightly cleaner."""
 
         fork = f"{start}_fork"
-        join = f"{end}_join"
+
+        # A network can contain several forks that reconverge at the same
+        # node.  Naming the auxiliary join from ``end`` alone makes those
+        # regions reuse one node.  On the second insertion, the existing
+        # ``join -> end`` edge is then rewritten as ``join -> join``, which
+        # creates a self-loop and makes the graph non-DAG.  Include ``start``
+        # so every SESE region owns a distinct join node.
+        join = f"{start}_to_{end}_join"
+
+        if fork in self or join in self:
+            raise RuntimeError(
+                "Auxiliary residual node name collision while processing "
+                f"fork {start!r} and join {end!r}: {fork!r}, {join!r}."
+            )
 
         # Add fork/join nodes to the network
         self.add_node(fork, op="fork", module=None)
@@ -98,6 +111,13 @@ class NetworkDAG(nx.DiGraph):
             self.remove_edge(parent, end)
             self.add_edge(parent, join)
         self.add_edge(join, end)
+
+        if not nx.is_directed_acyclic_graph(self):
+            cycle = nx.find_cycle(self, orientation="original")
+            raise RuntimeError(
+                "Residual fork/join insertion introduced a cycle while "
+                f"processing {start!r} -> {end!r}: {cycle}"
+            )
 
         return fork, join
 

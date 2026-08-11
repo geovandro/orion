@@ -296,13 +296,45 @@ class BootstrapPlacer:
         module.bootstrapper = bootstrapper
         
         # Register a forward hook that applies bootstrapping to outputs
-        module.register_forward_hook(lambda mod, input, output: bootstrapper(output))
+        module.register_forward_hook(
+            lambda mod, inputs, output: self._bootstrap_output(bootstrapper, output)
+        )
+
+    @staticmethod
+    def _bootstrap_output(bootstrapper, output):
+        """Apply one compiled bootstrapper to every ciphertext a logical
+        module produced. A module that represents several repeated
+        ciphertext instances (folded into a single node so the solver only
+        makes one level/bootstrap decision for all of them)
+        returns a list, or list-of-lists, of ciphertexts rather than a
+        single one. Every one of those ciphertexts shares this module's
+        single compiled level/bootstrap decision, so we recurse through
+        the output structure and bootstrap each leaf ciphertext with the
+        same bootstrapper."""
+        if isinstance(output, (list, tuple)):
+            mapped = [
+                BootstrapPlacer._bootstrap_output(bootstrapper, item)
+                for item in output
+            ]
+            return type(output)(mapped) if isinstance(output, tuple) else mapped
+        return bootstrapper(output)
     
     def _create_bootstrapper(self, module):
         # Set bootstrap statistics to scale into [-1, 1]
         btp_input_level = module.level - module.depth
         btp_input_min = module.output_min
         btp_input_max = module.output_max
+
+        input_min = float(btp_input_min)
+        input_max = float(btp_input_max)
+    
+        if not math.isfinite(input_min) or not math.isfinite(input_max):
+            raise ValueError(
+                "Cannot create bootstrapper because the module produced "
+                f"a non-finite range: module={type(module).__name__}, "
+                f"output_min={input_min}, output_max={input_max}"
+            )
+
         
         bootstrapper = Bootstrap(btp_input_min, btp_input_max, btp_input_level)
         

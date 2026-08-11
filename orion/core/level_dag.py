@@ -52,6 +52,13 @@ class LevelDAG(nx.DiGraph):
         aggregate_level_dag = LevelDAG(
             l_eff=self.l_eff, network_dag=self.network_dag, path=None
         )
+
+        # Preserve the residual-region boundary on the black-boxed DAG.
+        # Without this, aggregating a third (or later) parallel path calls
+        # __add__ on an aggregate created with path=None, which has no
+        # topo_path and raises AttributeError.
+        aggregate_level_dag.topo_path = [fork, join]
+
         aggregate_level_dag.add_nodes_from(
             (node, {"weight": 0}) for node in source_nodes)
         aggregate_level_dag.add_nodes_from(
@@ -127,7 +134,22 @@ class LevelDAG(nx.DiGraph):
         visited_nodes = set()
         for curr_path_node in self.topo_path:
             if curr_path_node not in visited_nodes:
-                if curr_path_node in solved_dags.keys():
+                # A solved residual can be substituted only when the current
+                # path contains the complete residual boundary. Graphs may
+                # contain overlapping (non-nested) fork/join regions, so a path
+                # can pass through a fork associated with another residual
+                # without passing through that fork's paired join. The previous
+                # implementation unconditionally searched for the join, which
+                # could raise ``ValueError: <join> is not in list``.
+                tail = self.network_dag.residuals.get(curr_path_node)
+                start_idx = self.topo_path.index(curr_path_node)
+                can_substitute_solved_region = (
+                    curr_path_node in solved_dags
+                    and tail in self.topo_path
+                    and self.topo_path.index(tail) >= start_idx
+                )
+
+                if can_substitute_solved_region:
                     # Then there already exists a solved LevelDAG for this SESE
                     # region. We'll append it into the LevelDAG we're building.
                     solved_level_dag = solved_dags[curr_path_node]
@@ -135,8 +157,6 @@ class LevelDAG(nx.DiGraph):
 
                     # Then update our list of visited nodes to skip over the
                     # nodes that were blackboxed by this region. 
-                    tail = self.network_dag.residuals[curr_path_node]
-                    start_idx = self.topo_path.index(curr_path_node)
                     end_idx = self.topo_path.index(tail)   
                     
                     for idx in range(start_idx, end_idx + 1):
