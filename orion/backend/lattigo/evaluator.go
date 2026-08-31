@@ -2,6 +2,7 @@ package main
 
 import (
 	"C"
+	"unsafe"
 
 	"github.com/baahl-nyu/lattigo/v6/core/rlwe"
 	"github.com/baahl-nyu/lattigo/v6/schemes/ckks"
@@ -30,19 +31,26 @@ func AddPo2RotationKeys() {
 	}
 }
 
-//export AddRotationKey
-func AddRotationKey(rotation C.int) {
-	galEl := scheme.Params.GaloisElement(int(rotation))
+func addRotationKeys(rotations []int) {
+	changed := false
+	for _, rotation := range rotations {
+		galEl := scheme.Params.GaloisElement(rotation)
+		if _, exists := liveRotKeys[galEl]; !exists {
+			liveRotKeys[galEl] = scheme.KeyGen.GenGaloisKeyNew(galEl, scheme.SecretKey)
+			changed = true
+		}
+	}
 
-	// Generate the required rotation key if it doesn't exist
-	if _, exists := liveRotKeys[galEl]; !exists {
-		rotKey := scheme.KeyGen.GenGaloisKeyNew(galEl, scheme.SecretKey)
-		liveRotKeys[galEl] = rotKey
-
+	if changed {
 		allKeysList := GetValuesFromMap(liveRotKeys)
 		keys := rlwe.NewMemEvaluationKeySet(scheme.RelinKey, allKeysList...)
 		scheme.Evaluator = scheme.Evaluator.WithKey(keys)
 	}
+}
+
+//export AddRotationKey
+func AddRotationKey(rotation C.int) {
+	addRotationKeys([]int{int(rotation)})
 }
 
 //export Negate
@@ -319,4 +327,56 @@ func MulRelinCiphertextNew(ctID0, ctID1 C.int) C.int {
 func DeleteRotationKeys() {
 	liveRotKeys = make(map[uint64]*rlwe.GaloisKey)
 	savedRotKeys = []uint64{}
+}
+
+//export RotateHoistedNew
+func RotateHoistedNew(
+	ciphertextID C.int,
+	rotationsPtr *C.int,
+	rotationCount C.int,
+	outputIDsPtr *C.int,
+) {
+	count := int(rotationCount)
+	if count == 0 {
+		return
+	}
+
+	cRotations := unsafe.Slice(rotationsPtr, count)
+	cOutputIDs := unsafe.Slice(outputIDsPtr, count)
+	rotations := make([]int, count)
+	for i := 0; i < count; i++ {
+		rotations[i] = int(cRotations[i])
+	}
+
+	addRotationKeys(rotations)
+	ctIn := RetrieveCiphertext(int(ciphertextID))
+	ctOut, err := scheme.Evaluator.RotateHoistedNew(ctIn, rotations)
+	if err != nil {
+		panic(err)
+	}
+
+	for i, rotation := range rotations {
+		cOutputIDs[i] = C.int(PushCiphertext(ctOut[rotation]))
+	}
+}
+
+//export MulCiphertextNoRelinNew
+func MulCiphertextNoRelinNew(ctID0, ctID1 C.int) C.int {
+	ctIn0 := RetrieveCiphertext(int(ctID0))
+	ctIn1 := RetrieveCiphertext(int(ctID1))
+	ctOut, err := scheme.Evaluator.MulNew(ctIn0, ctIn1)
+	if err != nil {
+		panic(err)
+	}
+	return C.int(PushCiphertext(ctOut))
+}
+
+//export RelinearizeCiphertextNew
+func RelinearizeCiphertextNew(ciphertextID C.int) C.int {
+	ctIn := RetrieveCiphertext(int(ciphertextID))
+	ctOut, err := scheme.Evaluator.RelinearizeNew(ctIn)
+	if err != nil {
+		panic(err)
+	}
+	return C.int(PushCiphertext(ctOut))
 }

@@ -255,7 +255,10 @@ class LevelDAG(nx.DiGraph):
             t_boot = a * math.exp(b * self.l_eff) + c
             num_boots_required = self.get_num_output_cts(prev_module)
             
-            return (t_boot * num_boots_required, num_boots_required)
+            return (
+                t_boot * num_boots_required * prev_module.bootstrap_weight,
+                num_boots_required,
+            )
         
         # Case 4: No bootstrap required
         return (0, 0)

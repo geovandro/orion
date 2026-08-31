@@ -1,3 +1,6 @@
+import ctypes
+
+
 class NewEvaluator:
     def __init__(self, scheme):
         self.backend = scheme.backend
@@ -16,6 +19,19 @@ class NewEvaluator:
         if in_place:
             return self.backend.Rotate(ctxt, amount)
         return self.backend.RotateNew(ctxt, amount)
+
+    def rotate_many(self, ctxt, amounts):
+        amounts = [int(amount) for amount in amounts]
+        if not amounts:
+            return []
+        if len(set(amounts)) != len(amounts):
+            raise ValueError("rotate_many does not accept duplicate rotation amounts.")
+
+        count = len(amounts)
+        rotations = (ctypes.c_int * count)(*amounts)
+        output_ids = (ctypes.c_int * count)()
+        self.backend.RotateHoistedNew(ctxt, rotations, count, output_ids)
+        return [int(output_ids[i]) for i in range(count)]
 
     def add_scalar(self, ctxt, scalar, in_place):
         if in_place:
@@ -76,6 +92,14 @@ class NewEvaluator:
             ct_out = self.backend.MulRelinCiphertextNew(ctxt0, ctxt1)
         
         return self.backend.Rescale(ct_out)
+
+    def mul_ciphertext_raw(self, ctxt0, ctxt1):
+        """Multiply without relinearization or rescaling."""
+        return self.backend.MulCiphertextNoRelinNew(ctxt0, ctxt1)
+
+    def relinearize(self, ctxt):
+        """Relinearize without rescaling."""
+        return self.backend.RelinearizeCiphertextNew(ctxt)
     
     def rescale(self, ctxt, in_place):
         if in_place:
@@ -87,4 +111,3 @@ class NewEvaluator:
 
     def get_live_ciphertexts(self):
         return self.backend.GetLiveCiphertexts() 
-

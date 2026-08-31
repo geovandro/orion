@@ -223,6 +223,45 @@ class CipherTensor:
             rot_ids.append(rot_id)
 
         return CipherTensor(self.scheme, rot_ids, self.shape, self.on_shape)
+
+    def roll_many(self, amounts):
+        """Rotate each ciphertext by several amounts using hoisting."""
+        amounts = [int(amount) for amount in amounts]
+        if not amounts:
+            return []
+
+        ids_by_rotation = [[] for _ in amounts]
+        for ctxt_id in self.ids:
+            rotated_ids = self.evaluator.rotate_many(ctxt_id, amounts)
+            for index, rotated_id in enumerate(rotated_ids):
+                ids_by_rotation[index].append(rotated_id)
+
+        return [
+            CipherTensor(self.scheme, ids, self.shape, self.on_shape)
+            for ids in ids_by_rotation
+        ]
+
+    def mul_raw(self, other):
+        """Multiply ciphertexts without relinearization or rescaling."""
+        self._check_valid(other)
+        if not isinstance(other, CipherTensor):
+            raise ValueError("mul_raw requires another CipherTensor.")
+        if len(self.ids) != len(other.ids):
+            raise ValueError(
+                "CipherTensor objects must contain the same number of ciphertexts."
+            )
+
+        output_ids = [
+            self.evaluator.mul_ciphertext_raw(left_id, right_id)
+            for left_id, right_id in zip(self.ids, other.ids)
+        ]
+        return CipherTensor(self.scheme, output_ids, self.shape, self.on_shape)
+
+    def relinearize(self):
+        output_ids = [
+            self.evaluator.relinearize(ctxt_id) for ctxt_id in self.ids
+        ]
+        return CipherTensor(self.scheme, output_ids, self.shape, self.on_shape)
     
     def _check_valid(self, other):
         return

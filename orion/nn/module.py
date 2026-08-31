@@ -1,5 +1,6 @@
 import time
 import functools
+import math
 from abc import ABC, abstractmethod
 
 import torch
@@ -18,6 +19,7 @@ class Module(nn.Module, ABC):
         self.he_mode = False
         self.trace_internals = False
         self.preserve_input_shapes = False
+        self.bootstrap_weight = 1.0
 
     @staticmethod
     def set_scheme(scheme):
@@ -56,6 +58,13 @@ class Module(nn.Module, ABC):
 
     def set_level(self, level):
         self.level = level
+
+    def set_bootstrap_weight(self, weight):
+        if not isinstance(weight, (int, float)) or isinstance(weight, bool):
+            raise TypeError("bootstrap weight must be a positive number")
+        if not math.isfinite(weight) or weight <= 0:
+            raise ValueError("bootstrap weight must be finite and greater than zero")
+        self.bootstrap_weight = float(weight)
 
     def trace_internal_ops(self, enabled=True):
         self.trace_internals = enabled
