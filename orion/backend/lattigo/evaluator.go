@@ -106,6 +106,17 @@ func RescaleNew(ciphertextID C.int) C.int {
 	return C.int(idx)
 }
 
+// TEMP: Diagnostic wrapper for enforcing Orion-assigned module input levels.
+//
+//export DropLevelNew
+func DropLevelNew(ciphertextID, levels C.int) C.int {
+	ctIn := RetrieveCiphertext(int(ciphertextID))
+	ctOut := scheme.Evaluator.DropLevelNew(ctIn, int(levels))
+
+	idx := PushCiphertext(ctOut)
+	return C.int(idx)
+}
+
 //export AddScalar
 func AddScalar(ciphertextID C.int, scalar C.float) C.int {
 	ctIn := RetrieveCiphertext(int(ciphertextID))

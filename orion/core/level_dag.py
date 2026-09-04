@@ -126,28 +126,44 @@ class LevelDAG(nx.DiGraph):
         prev_dag_nodes = None
         visited_nodes = set()
         for curr_path_node in self.topo_path:
-            if curr_path_node not in visited_nodes:
-                if curr_path_node in solved_dags.keys():
-                    # Then there already exists a solved LevelDAG for this SESE
-                    # region. We'll append it into the LevelDAG we're building.
-                    solved_level_dag = solved_dags[curr_path_node]
-                    self.append(solved_level_dag)
+            if curr_path_node in visited_nodes:
+                continue
 
-                    # Then update our list of visited nodes to skip over the
-                    # nodes that were blackboxed by this region. 
-                    tail = self.network_dag.residuals[curr_path_node]
-                    start_idx = self.topo_path.index(curr_path_node)
-                    end_idx = self.topo_path.index(tail)   
-                    
-                    for idx in range(start_idx, end_idx + 1):
-                        visited_nodes.add(self.topo_path[idx])
-                    
-                    prev_dag_nodes = solved_level_dag.tail()
-                else:
-                    # Otherwise, just build the next layer and connect it.
-                    curr_dag_nodes = self.build_layer(curr_path_node)
-                    self.connect_layer_to_existing_dag(curr_dag_nodes, prev_dag_nodes)
-                    prev_dag_nodes = curr_dag_nodes
+            tail = self.network_dag.residuals.get(curr_path_node)
+
+            # NEW: Reuse a solved residual region only when its complete
+            # fork-to-join span exists in this path. Atomic modules preserve
+            # physical operations, but nested or partial solver paths can still
+            # contain a region's fork without its join.
+            can_substitute_solved_region = (
+                curr_path_node in solved_dags
+                and tail is not None
+                and tail in self.topo_path
+                and self.topo_path.index(tail)
+                >= self.topo_path.index(curr_path_node)
+            )
+
+            if can_substitute_solved_region:
+                solved_level_dag = solved_dags[curr_path_node]
+                self.append(solved_level_dag)
+
+                start_idx = self.topo_path.index(curr_path_node)
+                end_idx = self.topo_path.index(tail)
+
+                for idx in range(start_idx, end_idx + 1):
+                    visited_nodes.add(self.topo_path[idx])
+
+                prev_dag_nodes = solved_level_dag.tail()
+
+            else:
+                curr_dag_nodes = self.build_layer(curr_path_node)
+
+                self.connect_layer_to_existing_dag(
+                    curr_dag_nodes,
+                    prev_dag_nodes,
+                )
+
+                prev_dag_nodes = curr_dag_nodes
 
     def build_layer(self, node: str):
         """Builds the next layer of nodes in the level DAG and estimates

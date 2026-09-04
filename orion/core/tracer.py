@@ -362,8 +362,14 @@ class OrionTracer(fx.Tracer):
         if not isinstance(m, nn.Module):
             return False
         
-        if isinstance(m, on.Module) and m.trace_internals:
-            return False
+        if isinstance(m, on.Module):
+            if m.trace_internals:
+                return False
+            # NEW: Treat explicitly atomic Orion modules as one indivisible FX
+            # node. Bootstrap placement may occur after the module, but not
+            # between the physical operations implemented inside its forward().
+            if getattr(m, "trace_atomic", False):
+                return True
        
         if isinstance(m, (nn.Sequential, nn.ModuleList, nn.ModuleDict)):
             return False
@@ -575,5 +581,3 @@ class StatsTracker(fx.Interpreter):
             else:
                 types.append(type(x).__name__)
         return types
-
-

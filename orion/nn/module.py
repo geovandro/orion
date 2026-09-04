@@ -18,6 +18,7 @@ class Module(nn.Module, ABC):
         self.fused = False
         self.he_mode = False
         self.trace_internals = False
+        self.trace_atomic = False
         self.preserve_input_shapes = False
         self.bootstrap_weight = 1.0
 

@@ -105,6 +105,10 @@ class NewEvaluator:
         if in_place:
             return self.backend.Rescale(ctxt)
         return self.backend.RescaleNew(ctxt)
+
+    # TEMP - NEW: Diagnostic wrapper for Orion-assigned module input levels.
+    def drop_level(self, ctxt, levels):
+        return self.backend.DropLevelNew(ctxt, int(levels))
     
     def get_live_plaintexts(self):
         return self.backend.GetLivePlaintexts() 

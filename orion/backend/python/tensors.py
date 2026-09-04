@@ -262,6 +262,32 @@ class CipherTensor:
             self.evaluator.relinearize(ctxt_id) for ctxt_id in self.ids
         ]
         return CipherTensor(self.scheme, output_ids, self.shape, self.on_shape)
+
+    # NEW 
+    def rescale(self):
+        output_ids = [
+            self.evaluator.rescale(ctxt_id, in_place=False)
+            for ctxt_id in self.ids
+        ]
+        return CipherTensor(self.scheme, output_ids, self.shape, self.on_shape)
+
+    # TEMP - NEW: Diagnostic wrapper for Orion-assigned module input levels.
+    def drop_level(self, levels):
+        levels = int(levels)
+        if levels < 0:
+            raise ValueError("levels must be non-negative")
+        if levels == 0:
+            return self
+        if levels > self.level():
+            raise ValueError(
+                f"Cannot drop {levels} levels from ciphertext at level "
+                f"{self.level()}."
+            )
+        output_ids = [
+            self.evaluator.drop_level(ctxt_id, levels)
+            for ctxt_id in self.ids
+        ]
+        return CipherTensor(self.scheme, output_ids, self.shape, self.on_shape)
     
     def _check_valid(self, other):
         return

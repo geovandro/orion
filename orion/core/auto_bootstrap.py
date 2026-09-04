@@ -191,7 +191,7 @@ class BootstrapSolver:
         # We'll use this empty level DAG to query the number of
         # bootstraps per layer of the network dag.
         query = LevelDAG(self.l_eff, self.network_dag, path=None)  
-        
+
         total_bootstraps = 0
         bootstrapper_slots = []
 
@@ -226,8 +226,34 @@ class BootstrapSolver:
         # Orion module, and so a module attribute exists.
         module = self.network_dag.nodes[node]["module"]
         max_slots = module.scheme.params.get_slots()
-        
-        elements = module.fhe_output_shape.numel()
+
+        # Packed ciphertext modules may process more slots than their traced output
+        # shape represents. Prefer the module-provided physical slot count when set.
+        bootstrap_slots = getattr(module, "bootstrap_slots", None)
+        if bootstrap_slots is not None:
+            return int(bootstrap_slots)
+
+        # Atomic modules may return nested collections of ciphertexts. Flatten
+        # their traced shapes to validate a common bootstrap slot requirement.
+        def flatten_shapes(shape):
+            if hasattr(shape, "numel"):
+                return [shape]
+            if isinstance(shape, (list, tuple)):
+                return [
+                    leaf
+                    for child in shape
+                    for leaf in flatten_shapes(child)
+                ]
+            return [shape]
+
+        shapes = flatten_shapes(module.fhe_output_shape)
+        if not shapes:
+            raise ValueError("Bootstrap output shape cannot be empty.")
+        if any(shape != shapes[0] for shape in shapes[1:]):
+            raise ValueError(
+                "One bootstrap hook cannot process outputs with different shapes."
+            )
+        elements = shapes[0].numel()
         curr_slots = 2 ** math.ceil(math.log2(elements))
         slots = int(min(max_slots, curr_slots)) # sparse bootstrapping
         
@@ -282,17 +308,50 @@ class BootstrapPlacer:
         self.network_dag = network_dag
     
     def place_bootstraps(self):
+        # A module can appear in multiple graph nodes. Register at most one
+        # bootstrap hook per module object to avoid bootstrapping its output
+        # multiple times. Invocation-specific placement requires distinct
+        # module instances.
+        placed_modules = set()
         for node in self.network_dag.nodes:
             if self.network_dag.nodes[node]["bootstrap"]:
                 module = self.network_dag.nodes[node]["module"]
+                module_id = id(module)
+                if module_id in placed_modules:
+                    continue
                 self._apply_bootstrap_hook(module)
+                placed_modules.add(module_id)
     
     def _apply_bootstrap_hook(self, module):
         bootstrapper = self._create_bootstrapper(module)
         module.bootstrapper = bootstrapper
         
         # Register a forward hook that applies bootstrapping to outputs
-        module.register_forward_hook(lambda mod, input, output: bootstrapper(output))
+        module.register_forward_hook(
+            lambda mod, input, output: self._bootstrap_output(
+                bootstrapper,
+                output,
+            )
+        )
+
+    # Preserve nested output structure while bootstrapping every ciphertext leaf.
+    def _bootstrap_output(self, bootstrapper, output):
+        if isinstance(output, list):
+            return [
+                self._bootstrap_output(bootstrapper, value)
+                for value in output
+            ]
+        if isinstance(output, tuple):
+            return tuple(
+                self._bootstrap_output(bootstrapper, value)
+                for value in output
+            )
+        if isinstance(output, dict):
+            return {
+                key: self._bootstrap_output(bootstrapper, value)
+                for key, value in output.items()
+            }
+        return bootstrapper(output)
     
     def _create_bootstrapper(self, module):
         # Set bootstrap statistics to scale into [-1, 1]
@@ -301,6 +360,13 @@ class BootstrapPlacer:
         btp_input_max = module.output_max
         
         bootstrapper = Bootstrap(btp_input_min, btp_input_max, btp_input_level)
+        # Propagate the physical packed-slot count to bootstrap fitting and
+        # execution.
+        bootstrapper.bootstrap_slots = getattr(
+            module,
+            "bootstrap_slots",
+            None,
+        )
         
         bootstrapper.scheme = self.net.scheme
         bootstrapper.margin = self.net.margin

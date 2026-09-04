@@ -407,6 +407,13 @@ class LattigoLibrary:
             restype=ctypes.c_int
         )
 
+        # TEMP - NEW: Diagnostic wrapper for Orion-assigned module input levels.
+        self.DropLevelNew = LattigoFunction(
+            self.lib.DropLevelNew,
+            argtypes=[ctypes.c_int, ctypes.c_int],
+            restype=ctypes.c_int
+        )
+
         self.AddScalar = LattigoFunction(
             self.lib.AddScalar,
             argtypes=[

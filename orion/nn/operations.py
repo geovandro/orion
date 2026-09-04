@@ -1,4 +1,5 @@
 import math
+import time
 import torch
 
 from .module import Module, timer
@@ -44,6 +45,11 @@ class Bootstrap(Module):
         self.prescale = 1
         self.postscale = 1
         self.constant = 0
+        # NEW: Track native bootstrap time separately from surrounding module
+        # preprocessing and postprocessing.
+        self.bootstrap_call_times = []
+        self.total_bootstrap_time = 0.0
+        self.num_bootstrap_calls = 0
 
     def extra_repr(self):
         l_eff = len(self.scheme.params.get_logq()) - 1
@@ -67,8 +73,36 @@ class Bootstrap(Module):
     def compile(self):
         # We'll then encode the prescale at the level of the input ciphertext
         # to ensure its rescaling is errorless
-        elements = self.fhe_input_shape.numel()
-        curr_slots = 2 ** math.ceil(math.log2(elements))
+        # NEW: Packed modules may provide their physical ciphertext slot count
+        # when it cannot be inferred from the traced logical shape.
+        bootstrap_slots = getattr(self, "bootstrap_slots", None)
+        if bootstrap_slots is not None:
+            elements = int(bootstrap_slots)
+            curr_slots = elements
+        else:
+            # NEW: Atomic modules may expose nested output shapes. Validate
+            # that every ciphertext leaf can use the same bootstrapper.
+            def flatten_shapes(shape):
+                if isinstance(shape, torch.Size):
+                    return [shape]
+                if isinstance(shape, (list, tuple)):
+                    return [
+                        leaf
+                        for child in shape
+                        for leaf in flatten_shapes(child)
+                    ]
+                return [shape]
+
+            shapes = flatten_shapes(self.fhe_input_shape)
+            if not shapes:
+                raise ValueError("Bootstrap output shape cannot be empty.")
+            shape = shapes[0]
+            if any(other != shape for other in shapes[1:]):
+                raise ValueError(
+                    "One bootstrap hook cannot process outputs with different shapes."
+                )
+            elements = shape.numel()
+            curr_slots = 2 ** math.ceil(math.log2(elements))
 
         prescale_vec = torch.zeros(curr_slots)
         prescale_vec[:elements] = self.prescale
@@ -88,8 +122,14 @@ class Bootstrap(Module):
         if self.constant != 0:
             x += self.constant
         x *= self.prescale_ptxt
- 
+
+        bootstrap_start = time.perf_counter()
         x = x.bootstrap()
+        bootstrap_elapsed = time.perf_counter() - bootstrap_start
+
+        self.bootstrap_call_times.append(bootstrap_elapsed)
+        self.total_bootstrap_time += bootstrap_elapsed
+        self.num_bootstrap_calls += 1
 
         # Scale and shift back to the original range
         if self.postscale != 1:
@@ -98,7 +138,3 @@ class Bootstrap(Module):
             x -= self.constant
 
         return x
-
-
-
-
