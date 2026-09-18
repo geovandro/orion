@@ -244,6 +244,34 @@ func MulScalarFloatNew(ciphertextID C.int, scalar C.float) C.int {
 	return C.int(idx)
 }
 
+// MulByI multiplies a ciphertext by the imaginary unit i. Since i is a
+// Gaussian integer (both real/imag parts are exact integers), Lattigo's
+// CKKS evaluator treats this scalar as scale-preserving -- no rescale is
+// performed, exactly like the MulScalarInt family above. This is used to
+// pack two real-valued ciphertexts a, b into a single ciphertext
+// z = a + i*b (via b*i then Add), halving the number of ciphertexts that
+// need to be bootstrapped.
+//
+//export MulByI
+func MulByI(ciphertextID C.int) C.int {
+	ctIn := RetrieveCiphertext(int(ciphertextID))
+	scheme.Evaluator.Mul(ctIn, complex(0, 1), ctIn)
+
+	return ciphertextID
+}
+
+//export MulByINew
+func MulByINew(ciphertextID C.int) C.int {
+	ctIn := RetrieveCiphertext(int(ciphertextID))
+	ctOut, err := scheme.Evaluator.MulNew(ctIn, complex(0, 1))
+	if err != nil {
+		panic(err)
+	}
+
+	idx := PushCiphertext(ctOut)
+	return C.int(idx)
+}
+
 //export AddPlaintext
 func AddPlaintext(ciphertextID, plaintextID C.int) C.int {
 	ctIn := RetrieveCiphertext(int(ciphertextID))

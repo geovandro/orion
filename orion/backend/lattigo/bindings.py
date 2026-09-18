@@ -498,6 +498,18 @@ class LattigoLibrary:
             restype=ctypes.c_int
         )
 
+        self.MulByI = LattigoFunction(
+            self.lib.MulByI,
+            argtypes=[ctypes.c_int],
+            restype=ctypes.c_int
+        )
+
+        self.MulByINew = LattigoFunction(
+            self.lib.MulByINew,
+            argtypes=[ctypes.c_int],
+            restype=ctypes.c_int
+        )
+
         self.AddPlaintext = LattigoFunction(
           self.lib.AddPlaintext,
             argtypes=[

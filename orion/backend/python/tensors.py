@@ -307,7 +307,63 @@ class CipherTensor:
         if in_place:
             return self
         return CipherTensor(self.scheme, conj_ids, self.shape, self.on_shape)
-    
+
+    def mul_by_i(self, in_place=False):
+        """Multiply every slot by the imaginary unit i.
+
+        i is a Gaussian integer, so Lattigo's CKKS evaluator treats this
+        as scale-preserving -- no rescale is performed, and no CKKS level
+        is consumed (mirrors the existing integer scalar-multiply
+        optimization).
+        """
+        mul_ids = []
+        for ctxt in self.ids:
+            mul_id = self.evaluator.mul_by_i(ctxt, in_place)
+            mul_ids.append(mul_id)
+
+        if in_place:
+            return self
+        return CipherTensor(self.scheme, mul_ids, self.shape, self.on_shape)
+
+    def pack_complex(self, other):
+        """Pack two same-shape real-valued CipherTensors into one complex
+        ciphertext z = self + i*other.
+
+        Both the imaginary-lane injection (mul_by_i) and the ciphertext
+        addition are level-free, so z ends up at the same CKKS level as
+        self/other. This lets two ciphertexts share a single bootstrap
+        call instead of requiring one each.
+        """
+        if not isinstance(other, CipherTensor):
+            raise ValueError("pack_complex requires another CipherTensor.")
+        if len(self.ids) != len(other.ids):
+            raise ValueError(
+                "CipherTensor objects must contain the same number of ciphertexts."
+            )
+
+        i_other = other.mul_by_i(in_place=False)
+        return self.add(i_other, in_place=False)
+
+    def unpack_complex(self):
+        """Split a complex-packed ciphertext z = a + i*b back into its
+        real and imaginary lanes: (a, b).
+
+        a = Re(z) = (z + conj(z)) / 2
+        b = Im(z) = -i * (z - conj(z)) / 2
+
+        conj(z) and mul_by_i are level-free; only the final scalar
+        multiply by 0.5 costs one rescale (1 CKKS level), which happens
+        right after a bootstrap where level budget is abundant.
+        """
+        conj = self.conjugate(in_place=False)
+
+        real_part = self.add(conj, in_place=False).mul(0.5, in_place=False)
+
+        imag_diff = self.sub(conj, in_place=False)
+        imag_part = imag_diff.mul_by_i(in_place=False).mul(-0.5, in_place=False)
+
+        return real_part, imag_part
+
     def _check_valid(self, other):
         return
     

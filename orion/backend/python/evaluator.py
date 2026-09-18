@@ -38,6 +38,15 @@ class NewEvaluator:
             return self.backend.Conjugate(ctxt)
         return self.backend.ConjugateNew(ctxt)
 
+    def mul_by_i(self, ctxt, in_place):
+        # Multiplies by the imaginary unit i. Since i is a Gaussian integer,
+        # this is scale-preserving (no rescale needed), just like
+        # mul_scalar's integer path. Used to pack a real-valued ciphertext
+        # into the imaginary lane of a complex-packed ciphertext.
+        if in_place:
+            return self.backend.MulByI(ctxt)
+        return self.backend.MulByINew(ctxt)
+
     def add_scalar(self, ctxt, scalar, in_place):
         if in_place:
             return self.backend.AddScalar(ctxt, float(scalar))
