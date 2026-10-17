@@ -418,6 +418,24 @@ class LattigoLibrary:
             argtypes=[ctypes.c_int],
             restype=ctypes.c_int
         )
+        self.BsgsDiagonalParallel = LattigoFunction(
+            self.lib.BsgsDiagonalParallel,
+            argtypes=[
+                ctypes.POINTER(ctypes.c_int), ctypes.c_int,
+                ctypes.POINTER(ctypes.c_int), ctypes.c_int,
+                ctypes.POINTER(ctypes.c_int), ctypes.c_int,
+                ctypes.c_int, ctypes.c_int,
+            ],
+            restype=ctypes.c_int
+        )
+        self.BootstrapMany = LattigoFunction(
+            self.lib.BootstrapMany,
+            argtypes=[
+                ctypes.POINTER(ctypes.c_int), ctypes.c_int,
+                ctypes.c_int, ctypes.c_int,
+            ],
+            restype=ArrayResultInt
+        )
 
         # TEMP - NEW: Diagnostic wrapper for Orion-assigned module input levels.
         self.DropLevelNew = LattigoFunction(

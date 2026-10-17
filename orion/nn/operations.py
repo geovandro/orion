@@ -37,6 +37,10 @@ class Mult(Module):
     
 
 class Bootstrap(Module):
+    # Number of goroutines for refreshing a module's independent output
+    # ciphertexts together (1 = one after another, the original behaviour).
+    parallel_workers = 1
+
     def __init__(self, input_min, input_max, input_level):
         super().__init__()
         self.input_min = input_min 
@@ -138,3 +142,37 @@ class Bootstrap(Module):
             x -= self.constant
 
         return x
+
+    def forward_many(self, xs):
+        """Refresh several independent ciphertext tensors at once (BootstrapMany).
+
+        Same per-ciphertext steps as ``forward``: shift and prescale, bootstrap,
+        postscale and shift back. Only the bootstraps run in parallel.
+        """
+        if not self.he_mode:
+            return xs
+        prepared = []
+        for x in xs:
+            if self.constant != 0:
+                x += self.constant
+            x *= self.prescale_ptxt
+            prepared.append(x)
+        first = prepared[0]
+        elements = first.on_shape.numel()
+        slots = int(min(first.slots(), 2 ** math.ceil(math.log2(elements))))
+        ids = [x.ids[0] for x in prepared]
+        bootstrap_start = time.perf_counter()
+        new_ids = first.backend.BootstrapMany(ids, slots, int(Bootstrap.parallel_workers))
+        bootstrap_elapsed = time.perf_counter() - bootstrap_start
+        self.bootstrap_call_times.append(bootstrap_elapsed)
+        self.total_bootstrap_time += bootstrap_elapsed
+        self.num_bootstrap_calls += len(prepared)
+        outs = []
+        for x, new_id in zip(prepared, new_ids):
+            y = type(x)(x.scheme, [new_id], x.shape, x.on_shape)
+            if self.postscale != 1:
+                y *= self.postscale
+            if self.constant != 0:
+                y -= self.constant
+            outs.append(y)
+        return outs

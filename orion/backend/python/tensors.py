@@ -401,10 +401,21 @@ class CipherTensor:
         slots = 2 ** math.ceil(math.log2(elements))
         slots = int(min(self.slots(), slots)) # sparse bootstrapping
         
-        btp_ids = []
-        for ctxt in self.ids:
-            btp_id = self.bootstrapper.bootstrap(ctxt, slots)
-            btp_ids.append(btp_id)
+        workers = 1
+        if len(self.ids) > 1:
+            try:
+                from orion.nn.operations import Bootstrap
+                workers = int(Bootstrap.parallel_workers)
+            except (ImportError, AttributeError):
+                workers = 1
+        if workers > 1:
+            # Independent ciphertexts of one tensor refresh on separate goroutines.
+            btp_ids = self.backend.BootstrapMany(list(self.ids), slots, workers)
+        else:
+            btp_ids = []
+            for ctxt in self.ids:
+                btp_id = self.bootstrapper.bootstrap(ctxt, slots)
+                btp_ids.append(btp_id)
 
         return CipherTensor(self.scheme, btp_ids, self.shape, self.on_shape)
         

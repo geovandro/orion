@@ -336,6 +336,14 @@ class BootstrapPlacer:
 
     # Preserve nested output structure while bootstrapping every ciphertext leaf.
     def _bootstrap_output(self, bootstrapper, output):
+        if (
+            isinstance(output, list)
+            and len(output) > 1
+            and getattr(type(bootstrapper), "parallel_workers", 1) > 1
+            and all(hasattr(v, "ids") and len(v.ids) == 1 for v in output)
+            and getattr(bootstrapper, "he_mode", False)
+        ):
+            return bootstrapper.forward_many(output)
         if isinstance(output, list):
             return [
                 self._bootstrap_output(bootstrapper, value)
