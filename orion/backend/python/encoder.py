@@ -28,15 +28,24 @@ class NewEncoder:
         num_elements = values.numel()
 
         values = values.cpu()
+        is_complex = torch.is_complex(values)
         pad_length = (-num_elements) % num_slots
-        vector = torch.zeros(num_elements + pad_length)
+        vector = torch.zeros(
+            num_elements + pad_length,
+            dtype=torch.complex128 if is_complex else torch.get_default_dtype(),
+        )
         vector[:num_elements] = values.flatten()
         num_plaintexts = len(vector) // num_slots
 
         plaintext_ids = []
         for i in range(num_plaintexts):
-            to_encode = vector[i*num_slots:(i+1)*num_slots].tolist()
-            plaintext_id = self.backend.Encode(to_encode, level, scale)
+            chunk = vector[i*num_slots:(i+1)*num_slots]
+            if is_complex:
+                # Complex packing: both slot halves carry data (EncodeComplex).
+                plaintext_id = self.backend.EncodeComplex(
+                    chunk.real.tolist(), chunk.imag.tolist(), level, scale)
+            else:
+                plaintext_id = self.backend.Encode(chunk.tolist(), level, scale)
             plaintext_ids.append(plaintext_id)
 
         return PlainTensor(self.scheme, plaintext_ids, values.shape)

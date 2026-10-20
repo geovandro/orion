@@ -178,3 +178,110 @@ func BootstrapMany(idsPtr *C.int, n C.int, numSlots C.int, nWorkers C.int) (*C.i
 	}
 	return SliceToCArray(newIDs, convertIntToCInt)
 }
+
+// Batch operation codes for BatchOp.
+const (
+	batchMulRelinRescale = 0 // a[i] * b[i] (ciphertexts), relinearize, rescale
+	batchMulPlainRescale = 1 // a[i] * pt[b[i]], rescale
+	batchAdd             = 2 // a[i] + b[i] (ciphertexts)
+	batchRotate          = 3 // rotate a[i] left by param
+	batchAddPlain        = 4 // a[i] + pt[b[i]]
+	batchSubPlain        = 5 // a[i] - pt[b[i]]
+)
+
+// BatchOp applies one homomorphic operation elementwise to n independent
+// ciphertexts on nWorkers goroutines and returns n new ciphertext ids (inputs
+// are not modified). Every element runs exactly what the serial wrappers run
+// (MulRelinNew + Rescale, MulNew + Rescale, AddNew, RotateNew, AddNew/SubNew
+// with a plaintext), so results are bit-for-bit identical to n serial calls.
+// Used for stages made of many same-shaped blocks (the softmax exponential's
+// 68 blocks, QK^T). Heap reads/writes and rotation-key generation stay on the
+// calling goroutine; each worker owns a ShallowCopy of the evaluator.
+//
+//export BatchOp
+func BatchOp(op C.int, aPtr *C.int, nA C.int, bPtr *C.int, nB C.int, param C.int, nWorkers C.int) (*C.int, C.ulong) {
+	aIDs := unsafe.Slice(aPtr, int(nA))
+	var bIDs []C.int
+	if int(nB) > 0 {
+		bIDs = unsafe.Slice(bPtr, int(nB))
+		if len(bIDs) != len(aIDs) {
+			panic("BatchOp: operand lists differ in length")
+		}
+	}
+	n := len(aIDs)
+	as := make([]*rlwe.Ciphertext, n)
+	bs := make([]*rlwe.Ciphertext, n)
+	ps := make([]*rlwe.Plaintext, n)
+	for i := 0; i < n; i++ {
+		as[i] = RetrieveCiphertext(int(aIDs[i]))
+		switch int(op) {
+		case batchMulRelinRescale, batchAdd:
+			bs[i] = RetrieveCiphertext(int(bIDs[i]))
+		case batchMulPlainRescale, batchAddPlain, batchSubPlain:
+			ps[i] = RetrievePlaintext(int(bIDs[i]))
+		}
+	}
+	if int(op) == batchRotate {
+		addRotationKeys([]int{int(param)}) // single-threaded
+	}
+
+	workers := int(nWorkers)
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > n {
+		workers = n
+	}
+	outputs := make([]*rlwe.Ciphertext, n)
+	jobs := make(chan int, n)
+	for i := 0; i < n; i++ {
+		jobs <- i
+	}
+	close(jobs)
+
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			eval := scheme.Evaluator.ShallowCopy()
+			for i := range jobs {
+				var out *rlwe.Ciphertext
+				var err error
+				switch int(op) {
+				case batchMulRelinRescale:
+					out, err = eval.MulRelinNew(as[i], bs[i])
+					if err == nil {
+						err = eval.Rescale(out, out)
+					}
+				case batchMulPlainRescale:
+					out, err = eval.MulNew(as[i], ps[i])
+					if err == nil {
+						err = eval.Rescale(out, out)
+					}
+				case batchAdd:
+					out, err = eval.AddNew(as[i], bs[i])
+				case batchRotate:
+					out, err = eval.RotateNew(as[i], int(param))
+				case batchAddPlain:
+					out, err = eval.AddNew(as[i], ps[i])
+				case batchSubPlain:
+					out, err = eval.SubNew(as[i], ps[i])
+				default:
+					panic("BatchOp: unknown operation")
+				}
+				if err != nil {
+					panic(err)
+				}
+				outputs[i] = out
+			}
+		}()
+	}
+	wg.Wait()
+
+	newIDs := make([]int, n)
+	for i, ct := range outputs {
+		newIDs[i] = PushCiphertext(ct)
+	}
+	return SliceToCArray(newIDs, convertIntToCInt)
+}

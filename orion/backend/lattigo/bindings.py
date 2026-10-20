@@ -328,6 +328,16 @@ class LattigoLibrary:
             ],
             restype=ctypes.c_int
         )
+        self.EncodeComplex = LattigoFunction(
+            self.lib.EncodeComplex,
+            argtypes=[
+                ctypes.POINTER(ctypes.c_float), ctypes.c_int,
+                ctypes.POINTER(ctypes.c_float), ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_ulong,
+            ],
+            restype=ctypes.c_int
+        )
         self.Decode = LattigoFunction(
             self.lib.Decode,
             argtypes=[ctypes.c_int],
@@ -427,6 +437,16 @@ class LattigoLibrary:
                 ctypes.c_int, ctypes.c_int,
             ],
             restype=ctypes.c_int
+        )
+        self.BatchOp = LattigoFunction(
+            self.lib.BatchOp,
+            argtypes=[
+                ctypes.c_int,
+                ctypes.POINTER(ctypes.c_int), ctypes.c_int,
+                ctypes.POINTER(ctypes.c_int), ctypes.c_int,
+                ctypes.c_int, ctypes.c_int,
+            ],
+            restype=ArrayResultInt
         )
         self.BootstrapMany = LattigoFunction(
             self.lib.BootstrapMany,
