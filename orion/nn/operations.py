@@ -108,6 +108,13 @@ class Bootstrap(Module):
             elements = shape.numel()
             curr_slots = 2 ** math.ceil(math.log2(elements))
 
+        max_slots = self.scheme.params.get_slots()
+        if bootstrap_slots is not None and elements < max_slots:
+            # Sparse bootstrap of repeated data: the prescale keeps only the
+            # first `elements` slots (zeros elsewhere); Lattigo's sparse
+            # bootstrap then returns those values repeated across all slots,
+            # which is the periodic layout the module produced.
+            curr_slots = max_slots
         prescale_vec = torch.zeros(curr_slots)
         prescale_vec[:elements] = self.prescale
 
@@ -128,7 +135,7 @@ class Bootstrap(Module):
         x *= self.prescale_ptxt
 
         bootstrap_start = time.perf_counter()
-        x = x.bootstrap()
+        x = x.bootstrap(getattr(self, "bootstrap_slots", None))
         bootstrap_elapsed = time.perf_counter() - bootstrap_start
 
         self.bootstrap_call_times.append(bootstrap_elapsed)
@@ -158,8 +165,11 @@ class Bootstrap(Module):
             x *= self.prescale_ptxt
             prepared.append(x)
         first = prepared[0]
-        elements = first.on_shape.numel()
-        slots = int(min(first.slots(), 2 ** math.ceil(math.log2(elements))))
+        if getattr(self, "bootstrap_slots", None) is not None:
+            slots = int(min(first.slots(), int(self.bootstrap_slots)))
+        else:
+            elements = first.on_shape.numel()
+            slots = int(min(first.slots(), 2 ** math.ceil(math.log2(elements))))
         ids = [x.ids[0] for x in prepared]
         bootstrap_start = time.perf_counter()
         new_ids = first.backend.BootstrapMany(ids, slots, int(Bootstrap.parallel_workers))

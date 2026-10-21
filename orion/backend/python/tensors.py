@@ -396,10 +396,11 @@ class CipherTensor:
     def moduli(self):
         return self.backend.GetModuliChain()
     
-    def bootstrap(self):
-        elements = self.on_shape.numel()
-        slots = 2 ** math.ceil(math.log2(elements))
-        slots = int(min(self.slots(), slots)) # sparse bootstrapping
+    def bootstrap(self, slots=None):
+        if slots is None:
+            elements = self.on_shape.numel()
+            slots = 2 ** math.ceil(math.log2(elements))
+        slots = int(min(self.slots(), int(slots))) # sparse bootstrapping
         
         workers = 1
         if len(self.ids) > 1:
