@@ -457,6 +457,15 @@ class LattigoLibrary:
             restype=ArrayResultInt
         )
 
+        self.BootstrapManyAtLevel = LattigoFunction(
+            self.lib.BootstrapManyAtLevel,
+            argtypes=[
+                ctypes.POINTER(ctypes.c_int), ctypes.c_int,
+                ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ],
+            restype=ArrayResultInt
+        )
+
         # TEMP - NEW: Diagnostic wrapper for Orion-assigned module input levels.
         self.DropLevelNew = LattigoFunction(
             self.lib.DropLevelNew,
@@ -825,6 +834,26 @@ class LattigoLibrary:
         self.Bootstrap = LattigoFunction(
             self.lib.Bootstrap,
             argtypes=[
+                ctypes.c_int,
+                ctypes.c_int,
+            ],
+            restype=ctypes.c_int
+        )
+
+        self.NewBootstrapperAtLevel = LattigoFunction(
+            self.lib.NewBootstrapperAtLevel,
+            argtypes=[
+                ctypes.POINTER(ctypes.c_int), ctypes.c_int, # logPs
+                ctypes.c_int, # slots
+                ctypes.c_int, # output level
+            ],
+            restype=None
+        )
+
+        self.BootstrapAtLevel = LattigoFunction(
+            self.lib.BootstrapAtLevel,
+            argtypes=[
+                ctypes.c_int,
                 ctypes.c_int,
                 ctypes.c_int,
             ],

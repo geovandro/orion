@@ -1,4 +1,5 @@
 import math
+import os
 import networkx as nx
 import matplotlib.pyplot as plt
 
@@ -212,14 +213,48 @@ class BootstrapSolver:
                 if curr_boots > 0:
                     self.network_dag.nodes[node]["bootstrap"] = True
                     slots = self.get_bootstrap_slots(node)
+                    # NEW: a module may ask for a refresh to a lower level
+                    # (bootstrap_level); each (slots, level) pair needs its
+                    # own bootstrapper. None = the scheme's maximum level.
+                    module = self.network_dag.nodes[node]["module"]
+                    level = getattr(module, "bootstrap_level", None)
+                    if level is None:
+                        level = self.choose_target_level(node, node_map)
+                        if level is not None:
+                            module.bootstrap_level = level
+                    key = slots if level is None else (slots, int(level))
                     
                     # Add bootstrapper to generate
-                    if slots not in bootstrapper_slots:
-                        bootstrapper_slots.append(slots)
+                    if key not in bootstrapper_slots:
+                        bootstrapper_slots.append(key)
                     break
 
         return total_bootstraps , bootstrapper_slots
     
+    def choose_target_level(self, node, node_map):
+        """Lowest allowed output level that still feeds every child (or None).
+
+        ORION_BTP_TARGET_LEVELS="8,11" lets a refresh stop below the maximum
+        level when its consumers start lower: the planned input level of each
+        child is known here, the refresh needs the largest of them, and the
+        smallest allowed level at or above it is used. Each level used costs
+        one more set of bootstrap keys. Unset: always the maximum (original).
+        """
+        spec = os.environ.get("ORION_BTP_TARGET_LEVELS", "").strip()
+        if not spec:
+            return None
+        allowed = sorted(int(v) for v in spec.split(",") if v.strip())
+        needed = max(
+            int(node_map[child].split("=")[-1])
+            for child in self.network_dag.successors(node)
+        )
+        for level in allowed:
+            if needed <= level < self.l_eff:
+                print(f"├── refresh after {node}: children start at level "
+                      f"{needed}, bootstrapping to level {level}")
+                return level
+        return None
+
     def get_bootstrap_slots(self, node):
         # If we're here, then our auto-bootstrapper has determined that the 
         # output of this node will be bootstrapped. Therefore it must be an
@@ -375,6 +410,7 @@ class BootstrapPlacer:
             "bootstrap_slots",
             None,
         )
+        bootstrapper.bootstrap_level = getattr(module, "bootstrap_level", None)
         
         bootstrapper.scheme = self.net.scheme
         bootstrapper.margin = self.net.margin

@@ -263,13 +263,21 @@ class Scheme:
 
         if bootstrapper_slots:
             start = time.time()
-            slots_str = ", ".join([str(int(math.log2(slot))) for slot in bootstrapper_slots])
+            def describe(key):
+                if isinstance(key, tuple):
+                    return f"{int(math.log2(key[0]))}@L{key[1]}"
+                return str(int(math.log2(key)))
+            slots_str = ", ".join(describe(key) for key in bootstrapper_slots)
             print(f"├── Generating bootstrappers for logslots = {slots_str} ... ", 
                   end="", flush=True)
             
-            # Generate the required (potentially sparse) bootstrappers.
-            for slot_count in bootstrapper_slots:
-                self.bootstrapper.generate_bootstrapper(slot_count)
+            # Generate the required (potentially sparse, possibly
+            # lower-output-level) bootstrappers.
+            for key in bootstrapper_slots:
+                if isinstance(key, tuple):
+                    self.bootstrapper.generate_bootstrapper(key[0], key[1])
+                else:
+                    self.bootstrapper.generate_bootstrapper(key)
             print(f"done! [{time.time()-start:.3f} secs.]")
 
         btp_placer = BootstrapPlacer(net, network_dag)

@@ -6,11 +6,16 @@ class NewEvaluator:
     def __del__(self):
         self.backend.DeleteBootstrappers()
 
-    def generate_bootstrapper(self, slots):
+    def generate_bootstrapper(self, slots, level=None):
         # We will wait to instantiate any bootstrapper until our bootstrap
-        # placement algorithm determines they're necessary.
+        # placement algorithm determines they're necessary. A level below the
+        # scheme's maximum builds a bootstrapper that refreshes to that level.
         logp = self.scheme.params.get_boot_logp()
-        return self.backend.NewBootstrapper(logp, slots)
+        if level is None:
+            return self.backend.NewBootstrapper(logp, slots)
+        return self.backend.NewBootstrapperAtLevel(logp, slots, int(level))
     
-    def bootstrap(self, ctxt, slots):
-        return self.backend.Bootstrap(ctxt, slots)
+    def bootstrap(self, ctxt, slots, level=None):
+        if level is None:
+            return self.backend.Bootstrap(ctxt, slots)
+        return self.backend.BootstrapAtLevel(ctxt, slots, int(level))

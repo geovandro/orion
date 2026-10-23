@@ -396,7 +396,7 @@ class CipherTensor:
     def moduli(self):
         return self.backend.GetModuliChain()
     
-    def bootstrap(self, slots=None):
+    def bootstrap(self, slots=None, level=None):
         if slots is None:
             elements = self.on_shape.numel()
             slots = 2 ** math.ceil(math.log2(elements))
@@ -411,11 +411,15 @@ class CipherTensor:
                 workers = 1
         if workers > 1:
             # Independent ciphertexts of one tensor refresh on separate goroutines.
-            btp_ids = self.backend.BootstrapMany(list(self.ids), slots, workers)
+            if level is None:
+                btp_ids = self.backend.BootstrapMany(list(self.ids), slots, workers)
+            else:
+                btp_ids = self.backend.BootstrapManyAtLevel(
+                    list(self.ids), slots, workers, int(level))
         else:
             btp_ids = []
             for ctxt in self.ids:
-                btp_id = self.bootstrapper.bootstrap(ctxt, slots)
+                btp_id = self.bootstrapper.bootstrap(ctxt, slots, level)
                 btp_ids.append(btp_id)
 
         return CipherTensor(self.scheme, btp_ids, self.shape, self.on_shape)

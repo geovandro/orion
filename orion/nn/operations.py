@@ -135,7 +135,10 @@ class Bootstrap(Module):
         x *= self.prescale_ptxt
 
         bootstrap_start = time.perf_counter()
-        x = x.bootstrap(getattr(self, "bootstrap_slots", None))
+        x = x.bootstrap(
+            getattr(self, "bootstrap_slots", None),
+            getattr(self, "bootstrap_level", None),
+        )
         bootstrap_elapsed = time.perf_counter() - bootstrap_start
 
         self.bootstrap_call_times.append(bootstrap_elapsed)
@@ -172,7 +175,12 @@ class Bootstrap(Module):
             slots = int(min(first.slots(), 2 ** math.ceil(math.log2(elements))))
         ids = [x.ids[0] for x in prepared]
         bootstrap_start = time.perf_counter()
-        new_ids = first.backend.BootstrapMany(ids, slots, int(Bootstrap.parallel_workers))
+        level = getattr(self, "bootstrap_level", None)
+        if level is None:
+            new_ids = first.backend.BootstrapMany(ids, slots, int(Bootstrap.parallel_workers))
+        else:
+            new_ids = first.backend.BootstrapManyAtLevel(
+                ids, slots, int(Bootstrap.parallel_workers), int(level))
         bootstrap_elapsed = time.perf_counter() - bootstrap_start
         self.bootstrap_call_times.append(bootstrap_elapsed)
         self.total_bootstrap_time += bootstrap_elapsed

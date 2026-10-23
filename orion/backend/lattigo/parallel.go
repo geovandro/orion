@@ -126,12 +126,23 @@ func BsgsDiagonalParallel(
 //
 //export BootstrapMany
 func BootstrapMany(idsPtr *C.int, n C.int, numSlots C.int, nWorkers C.int) (*C.int, C.ulong) {
+	return bootstrapMany(idsPtr, n, numSlots, nWorkers, -1)
+}
+
+// BootstrapManyAtLevel is BootstrapMany with a bootstrapper refreshing to outLevel.
+//
+//export BootstrapManyAtLevel
+func BootstrapManyAtLevel(idsPtr *C.int, n C.int, numSlots C.int, nWorkers C.int, outLevel C.int) (*C.int, C.ulong) {
+	return bootstrapMany(idsPtr, n, numSlots, nWorkers, int(outLevel))
+}
+
+func bootstrapMany(idsPtr *C.int, n C.int, numSlots C.int, nWorkers C.int, outLevel int) (*C.int, C.ulong) {
 	ids := unsafe.Slice(idsPtr, int(n))
 	inputs := make([]*rlwe.Ciphertext, len(ids))
 	for i, id := range ids {
 		inputs[i] = RetrieveCiphertext(int(id))
 	}
-	base := GetBootstrapper(int(numSlots))
+	base := GetBootstrapperAtLevel(int(numSlots), outLevel)
 	postscale := int(1 << (scheme.Params.LogMaxSlots() - base.LogMaxSlots()))
 
 	workers := int(nWorkers)
